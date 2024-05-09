@@ -1,0 +1,448 @@
+<html>
+<head>
+
+<title>Game</title>
+<meta charset='utf-8'>
+<script type='text/javascript' src='lib/key_codes.js'></script>
+<script type='text/javascript' src='lib/underscore.js'></script>
+<script type='text/javascript' src='lib/lib.js'></script>
+<script type='text/javascript' src='lib/lib2.js'></script>
+
+<style>
+	.css_main_screen
+	{
+		border: 0.5rem outset pink;
+	}
+</style>
+
+</head>
+<body onload=main()>
+<script>
+
+    var __ = {};
+    __.RHAL = runtime_HAL;
+
+    var
+        EVT_EMPTY			= 0,
+        EVT_TIMER			= 1,
+
+        EVT_CMD_NEW_FIGURE	= 20,
+
+        EVT_CMD_LEFT		= 101,
+        EVT_CMD_RIGHT		= 102,
+        EVT_CMD_UP		    = 103,
+        EVT_CMD_DOWN		= 104,
+        EVT_CMD_SHOOT		= 505,
+
+
+        EVT_CMD_PAUSE		= 506,
+        EVT_CMD_START		= 503
+    ;
+
+
+
+
+    var
+        C_KEY_LEFT		= KeyCode.KEY_A,
+        C_KEY_RIGHT		= KeyCode.KEY_D,
+        C_KEY_UP	    = KeyCode.KEY_W,
+        C_KEY_DOWN		= KeyCode.KEY_S,
+        C_KEY_SHOOT		= KeyCode.KEY_SPACE,
+        C_KEY_PAUSE		= KeyCode.KEY_P,
+        C_KEY_SPEED		= KeyCode.KEY_L,
+        C_KEY_START		= KeyCode.KEY_G
+    ;
+
+    var	M_KEY_CMD = {};
+        M_KEY_CMD[C_KEY_LEFT]	= EVT_CMD_LEFT;
+        M_KEY_CMD[C_KEY_RIGHT]	= EVT_CMD_RIGHT;
+        M_KEY_CMD[C_KEY_UP]	    = EVT_CMD_UP;
+        M_KEY_CMD[C_KEY_DOWN]	= EVT_CMD_DOWN;
+        M_KEY_CMD[C_KEY_SHOOT]	= EVT_CMD_SHOOT;
+        M_KEY_CMD[C_KEY_PAUSE]	= EVT_CMD_PAUSE;
+        M_KEY_CMD[C_KEY_START]	= EVT_CMD_START;
+
+    var
+        C_CELLS_X		= 10,
+	    C_CELLS_Y		= 10,
+
+        C_CELL_CX		= 40,
+        C_CELL_CY		= 40,
+
+        C_RS_X = 20,
+        C_RS_Y = 20,
+
+        C_SCREEN_CX		= C_CELLS_X * C_CELL_CX,
+        C_SCREEN_CY		= C_CELLS_Y * C_CELL_CY,
+
+        C_SCREEN_CRECT	= [0,0,C_SCREEN_CX,C_SCREEN_CY],
+        C_CELL_CRECT	= [0,0,C_CELL_CX,C_CELL_CY],
+
+        C_RS_CRECT = [0,0,C_RS_X,C_RS_Y],
+
+        C_TIMER_INTERVAL_MS=100
+
+    ;
+
+
+    var IMAGES =
+    [
+        { path : 'resources/wall.png', type : 'file_image' },
+        { path : 'resources/floor.png', type : 'file_image' },
+        { path : 'resources/wall_brick.png', type : 'file_image' },
+        // { path : 'resources/items/cell_02.png', type : 'file_image' },
+        // { path : 'resources/items/cell_03.png', type : 'file_image' },
+        // { path : 'resources/items/cell_04.png', type : 'file_image' },
+        // { path : 'resources/items/cell_05.png', type : 'file_image' },
+        // { path : 'resources/items/cell_06.png', type : 'file_image' },
+    ];
+
+    var TSPRITE = [
+        { path : 'resources/tanks/01/0.png', type : 'file_image' },
+        { path : 'resources/tanks/01/1.png', type : 'file_image' },
+        { path : 'resources/tanks/01/2.png', type : 'file_image' },
+        { path : 'resources/tanks/01/3.png', type : 'file_image' }
+    ];
+    var BSPRITE = [
+        { path : 'resources/bullets/01/0.png', type : 'file_image' },
+        { path : 'resources/bullets/01/1.png', type : 'file_image' },
+        { path : 'resources/bullets/01/2.png', type : 'file_image' },
+        { path : 'resources/bullets/01/3.png', type : 'file_image' }
+    ];
+
+
+    var game_state=0;
+    var is_running=1<<1; //единичку сдвинуть на одну позицию влево 10_2
+    var is_pause=1<<2; // то же самое, только 100_2
+    var is_end=1<<3; // 1000_2
+
+    // var game_field=[]
+    var sizes=[10,10]
+    var bul_template={
+            // pos:[10,40],
+            // cell_pos:'0x1',
+            velocity: [10,0],
+            // direction: 0
+        }
+    var tank1={
+        cell_pos:'0x0',
+        pos:[0,0],
+        // req_pos:[0,0],
+        direction:0,
+        move: function (pos) {
+            cell_move(this,pos)
+        },
+        bul:{
+            pos:[10,40],
+            cell_pos:'0x1',
+            velocity: [10,0],
+            direction: 1
+        },
+        shoot: function () {
+            if (!this.bul) {
+                this.bul = {
+                    direction: this.direction,
+                    pos: this.pos,
+                    velocity: rotate_v(bul_template.velocity, (this.direction-1)*Math.PI/2)
+                }
+            }
+        }
+    }
+    // var tank_direction=0 //0-вправо 1-вверх 2-влево 3-вниз
+    // var xy_cxcy={}
+
+    var
+        full_str_field=[],
+        str_field=[],
+        walls_fields={ind:['3x3','3x4','3x5','7x7'],des:['2x3','5x6','9x1']},
+        xy_cxcy={},
+        tanks=[tank1]
+    ;
+    // var walls_string=''
+
+
+
+    var RT =
+    {
+        GAME_STATE			: is_running,
+
+        SCREEN				: null,
+        SCREEN_BUFFER		: null,
+
+    };
+
+
+
+    function click_gateway(event)
+    {
+        if(event.keyCode in M_KEY_CMD) events_gateway(M_KEY_CMD[event.keyCode]);
+    }
+
+    function events_gateway(code){
+        // LOG(tank1_pose)
+        switch(code) {
+            case EVT_CMD_UP:
+                // move(tank1_pose, [0,-1])
+                tanks[0].move([0,-1])
+                break
+            case EVT_CMD_DOWN:
+                tanks[0].move([0,1])
+                break
+            case EVT_CMD_LEFT:
+                tanks[0].move([-1,0])
+                break
+            case EVT_CMD_RIGHT:
+                tanks[0].move([1,0])
+                break
+            case EVT_CMD_SHOOT:
+                tanks[0].shoot()
+                break
+            case EVT_TIMER:
+                _.map(tanks,function (tank,k,l) {
+                    if (tank.bul) {
+                        pix_move(tank.bul, tank.bul.velocity)
+                        // check_collision(bul)
+                        check_borders(tank.bul, tank)
+                    }
+                })
+        }
+        // LOG(tank1)
+
+    }
+
+    function cell_move(tank, position) {
+        // LOG(tank)
+        let new_tank_pos=stc(_.deepClone(tank.cell_pos))
+        let str_tank_pos=cts(add_v(new_tank_pos,position))
+
+        if (_.intersection(str_field,[str_tank_pos]).length>0) {
+            tank.cell_pos=str_tank_pos
+            tank.direction=Math.round(Math.atan2(position[1],position[0])/Math.PI*2)+1
+            tank.pos=calc_pix_pos(new_tank_pos)
+        }
+        // LOG(tank.pos)
+        draw()
+    }
+
+    function pix_move(obj,pos){
+        obj.pos = add_v(obj.pos,pos)
+        obj.cell_pos = cts(calc_cell_pos(obj.pos))
+        // LOG(obj.cell_pos)
+        draw()
+    }
+
+    function check_borders(obj,tank){
+        if (_.intersection(str_field,[obj.cell_pos]).length===0) {
+            tank.bul=undefined
+            draw()
+        }
+    }
+
+    function calc_cell_pos(pos){
+        return [Math.floor(pos[0]/C_CELL_CX),Math.floor(pos[1]/C_CELL_CY)]
+    }
+
+    function calc_pix_pos(pos){
+        return [pos[0]*C_CELL_CX,pos[1]*C_CELL_CY]
+    }
+
+    function cts(a) {
+        return '' + a[0] + 'x' + a[1];
+    }
+
+    function stc(s){
+        return _.map(s.split('x'), function(a) { return parseInt(a)})
+    }
+
+    function ctr(a) {
+        let ret = _.deepClone(C_CELL_CRECT)
+        ret[0]=a[0]
+        ret[1]=a[1]
+        return ret
+    }
+
+    function add_v(v1,v2){
+        let v=_.deepClone(v1)
+        v[0] += v2[0]
+        v[1] += v2[1]
+        return v
+    }
+
+    function mult_v(v1,s){
+        let v=_.deepClone(v1)
+        v[0] *= s
+        v[1] *= s
+        return v
+    }
+
+    function rotate_v(v1,a){
+        let v=[]
+        v[0]=v1[0] * Math.cos(a) - v1[1] * Math.sin(a)
+        v[1]=v1[0] * Math.sin(a) + v1[1] * Math.cos(a)
+        return v
+    }
+
+    function draw(){
+        draw_api(DRAW_CLEAR,	{ surface : RT.SCREEN_BUFFER, crect : C_SCREEN_CRECT } );
+
+
+        _.map(str_field,function (v,k,l){
+            draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : xy_cxcy[v],
+            crect_uv : C_RS_CRECT, resource : IMAGES[1].resource});
+        })
+
+        _.map(walls_fields.ind,function (v,k,l){
+
+            draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : xy_cxcy[v],
+            crect_uv : C_RS_CRECT, resource : IMAGES[0].resource});
+        })
+
+        _.map(walls_fields.des,function (v,k,l){
+
+            draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : xy_cxcy[v],
+            crect_uv : C_RS_CRECT, resource : IMAGES[2].resource});
+        })
+
+        _.map(tanks, function(tank,k,l){
+            draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : xy_cxcy[tank.cell_pos],
+            crect_uv : C_RS_CRECT, resource : TSPRITE[tank.direction].resource});
+            if (tank.bul) {
+                draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : ctr(tank.bul.pos),
+                crect_uv : C_RS_CRECT, resource : BSPRITE[tank.bul.direction].resource});
+                // draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : tank.bul.pos.concat([10,10]),
+                // crect_uv : C_RS_CRECT, resource : BSPRITE[tank.bul.direction].resource});
+
+            }
+        })
+
+        
+
+
+        draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN, crect : C_SCREEN_CRECT ,
+            crect_uv : C_SCREEN_CRECT, resource : RT.SCREEN_BUFFER.draw_api.canvas});
+    }
+
+
+    async function init() {
+
+
+        RT.SCREEN			= new_clone(__.RHAL.struct_surface_2d);
+        RT.SCREEN_BUFFER	= new_clone(__.RHAL.struct_surface_2d);
+        RT.SCREEN.container	= 'main_screen';
+        __.RHAL.init_surface_2d(true, RT.SCREEN, C_SCREEN_CRECT);
+        __.RHAL.init_surface_2d(true, RT.SCREEN_BUFFER, C_SCREEN_CRECT);
+
+        await __.RHAL.load_files(IMAGES);
+        await __.RHAL.load_files(TSPRITE);
+        await __.RHAL.load_files(BSPRITE);
+
+        let full_field=cartesianProduct(_.range(0,sizes[0],1),_.range(0,sizes[1],1))
+        full_str_field=_.map(full_field,function (v,k,l) { return cts(v);})
+
+        let cxcy=cartesianProduct(_.range(0,sizes[0]*C_CELL_CX,C_CELL_CX),_.range(0,sizes[1]*C_CELL_CY,C_CELL_CY));
+        cxcy=_.map(cxcy,function (v,k,l){return v.concat([C_CELL_CX,C_CELL_CY]);})
+        xy_cxcy=_.object(full_str_field,cxcy);
+        LOG(xy_cxcy)
+
+        str_field=_.difference(full_str_field,walls_fields.ind,walls_fields.des)
+
+        draw_api(DRAW_CLEAR,	{ surface : RT.SCREEN, crect : C_SCREEN_CRECT } );
+
+        document.addEventListener('keydown', function(event) { click_gateway(event); } );
+        setInterval(async function() { events_gateway(EVT_TIMER) }, C_TIMER_INTERVAL_MS);
+    }
+
+
+    async function main(){
+        // LOG("Hello")
+        // var a=5
+        // var b=['ss','32',6]
+        // LOG(a,b)
+        game_state=is_running;
+        LOG(game_state)
+        LOG(game_state&is_end)
+        LOG(game_state|is_end)
+        LOG((game_state|is_end).toString(2))
+
+
+
+        // var x=_.range(0,10,1);
+        // var y=_.range(0,10,1);
+        // var xy=cartesianProduct(x,y)
+        // // LOG(xy)
+        // str_field=_.map(xy,function (v,k,l) { return cts(v);})
+        //
+        // // LOG(str_field)
+        // // LOG(_.intersection(str_field,tank1_pose))
+        // var cx=_.range(0,10*20,20);
+        //
+        //
+        // var cy=_.range(0,10*20,20);
+        // var cxcy=cartesianProduct(cx,cy);
+        // // LOG(cx)
+        // cxcy=_.map(cxcy,function (v,k,l){return [v[0],v[1],20,20];})
+        // xy_cxcy=_.object(str_field,cxcy);
+        //
+        // LOG(xy_cxcy)
+
+        await init()
+
+
+    }
+
+
+    // class Vector{
+    //     constructor(x, y) {
+    //         this.x = x;
+    //         this.y = y;
+    //     }
+    //
+    //     add_ret(v2){
+    //         let v=_.deepClone(this)
+    //         v.x += v2.x
+    //         v.y += v2.y
+    //         return v
+    //     }
+    //
+    //     add(v2){
+    //         this.x += v2.x
+    //         this.y += v2.y
+    //     }
+    //
+    //     mult_ret(s){
+    //         let v=_.deepClone(this)
+    //         v.x *= s
+    //         v.y *= s
+    //         return v
+    //     }
+    //
+    //     mult(s){
+    //         this.x *= s
+    //         this.y *= s
+    //     }
+    // }
+
+
+
+
+</script>
+
+<h1>Game</h1>
+
+<button onclick=events_gateway(EVT_CMD_START)>Start</button><br>
+<br>
+<br><br>
+
+<canvas id=main_screen  class="css_main_screen"></canvas>
+
+<br><br>
+Move Keys: W,S,A,D,Space
+<br>
+Control Keys: Space - Start, P - Pause
+<!--<br><br>-->
+<!--This Tetris is just the some mathset algebra.-->
+<!--<br>-->
+<!--This job made for fun and childs teaching.-->
+
+</body>
+</html>
