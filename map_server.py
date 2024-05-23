@@ -1,4 +1,4 @@
-from bottle import route, run, get, post,request,static_file
+from bottle import route, run, get, post,request,static_file,response
 import json,random
 
 from gevent import monkey; monkey.patch_all()
@@ -15,7 +15,7 @@ def hello():
 
 @get('/map')
 def get_map():
-    return random.choice(existed_data)
+    return response(body=random.choice(existed_data),headets={"Access-Control-Allow-Origin":"*"})
 
 @get('/list')
 def map_list():
