@@ -31,11 +31,10 @@ def map_list():
 
 @post('/add_map')
 def add_exception_backend():
-    print(request.json)
-    data = request.json
-    text=data['text']
-    if text not in existed_data:
-        existed_data.append(text)
+    print(dir(request.body))
+    data = request.body.read().decode('utf-8')
+    if data not in existed_data:
+        existed_data.append(data)
         with open("maps.json",'w', encoding='utf-8') as f:
             json.dump(existed_data, f, ensure_ascii=False, indent=4)
         return {"status": "success"}
