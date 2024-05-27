@@ -9,9 +9,9 @@ from gevent import monkey; monkey.patch_all()
 def hello():
     return "Hello World!"
 
-# @route('/')
-# def main():
-#     return static_file('main.html', root='static/')
+@route('/')
+def main():
+    return static_file('start.htm', root='/')
 
 @get('/map')
 def get_map():
