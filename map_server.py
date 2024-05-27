@@ -18,8 +18,8 @@ def libs(filename):
     return static_file(filename,root='lib/')
 
 @get('/resources/<path:path>')
-def resources(filename):
-    return static_file(filename,root='resources/')
+def resources(path):
+    return static_file(path,root='resources/')
 
 @get('/map')
 def get_map():
