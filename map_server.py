@@ -9,7 +9,7 @@ from gevent import monkey; monkey.patch_all()
 def hello():
     return "Hello World!"
 
-@route('/')
+@get('/game')
 def main():
     return static_file('start.htm', root='/')
 
