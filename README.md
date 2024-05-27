@@ -1,4 +1,4 @@
 
 ### Play:
-[Play](start.htm)
+[Play](http://start.htm)
 
