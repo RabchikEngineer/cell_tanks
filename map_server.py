@@ -11,7 +11,7 @@ def hello():
 
 @get('/game')
 def main():
-    return static_file('start.htm')
+    return static_file('start.htm',root='')
 
 @get('/map')
 def get_map():
