@@ -17,6 +17,7 @@ def hello():
 def get_map():
     # resp=Response(body=random.choice(existed_data))
     response.add_header("Access-Control-Allow-Origin","*")
+    response.content_type="application/json"
     #response.add_header("test", True)
     return random.choice(existed_data)
 
@@ -32,7 +33,8 @@ def map_list():
 @post('/add_map')
 def add_map_api():
     print(dir(request.body))
-    data = request.body.read().decode('utf-8')
+    # data = request.body.read().decode('utf-8')
+    data = request.json()
     if data not in existed_data:
         existed_data.append(data)
         with open("maps.json",'w', encoding='utf-8') as f:

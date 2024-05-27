@@ -23,20 +23,22 @@
     __.RHAL = runtime_HAL;
 
     var
-        EVT_EMPTY			= 0,
         EVT_TIMER			= 1,
+        EVT_DEFEAT          = 2,
+        EVT_VICTORY         = 3,
 
-        EVT_CMD_NEW_FIGURE	= 20,
 
         EVT_CMD_LEFT		= 101,
         EVT_CMD_RIGHT		= 102,
         EVT_CMD_UP		    = 103,
         EVT_CMD_DOWN		= 104,
-        EVT_CMD_SHOOT		= 505,
+        EVT_CMD_SHOOT		= 105,
+        EVT_TURRET_SHOOT    = 106,
 
 
         EVT_CMD_PAUSE		= 506,
-        EVT_CMD_START		= 503
+        EVT_CMD_START		= 503,
+        EVT_CMD_RELOAD      = 504
     ;
 
 
@@ -80,7 +82,8 @@
 
         C_RS_CRECT = [0,0,C_RS_X,C_RS_Y],
 
-        C_TIMER_INTERVAL_MS=100
+        C_TIMER_INTERVAL_MS=100,
+        SHOOT_TIMER_INTERVAL_MS=1000
 
     ;
 
@@ -117,8 +120,6 @@
         is_pause=1<<2, // то же самое, только 100_2
         is_end=1<<3; // 1000_2
 
-    // var game_field=[]
-    // var sizes=[20,10]
     var bul_template={
             // pos:[10,40],
             // cell_pos:'0x1',
@@ -131,12 +132,7 @@
         move: function (pos) {
             cell_move(this,pos)
         },
-        // bul:{
-        //     cell_pos:'0x1',
-        //     velocity: [1,0],
-        //     direction: 1,
-        //     tank:tank1
-        // },
+
         bul: undefined,
         shoot: function () {
             if (!this.bul) {
@@ -144,7 +140,8 @@
                     direction: this.direction,
                     cell_pos: this.cell_pos,
                     velocity: rotate_v(bul_template.velocity, (this.direction-1)*Math.PI/2),
-                    tank:this
+                    tank:this,
+                    side:0
                 }
             }
         }
@@ -157,9 +154,11 @@
         str_field=[],
         // walls_fields={ind:['3x3','3x4','3x5','7x7'],des:['2x3','5x6','9x1'],
         //                 tar:['10x7','10x8','11x7','11x8']},
-        walls_fields={ind:[],des:[], tar:[]},
+        walls_fields={},
         xy_cxcy={},
-        tanks=[tank1]
+        turrets=[],
+        tanks=[tank1],
+        result_textblock=undefined
     ;
     // var walls_string=''
 
@@ -182,7 +181,7 @@
         if(event.keyCode in M_KEY_CMD) events_gateway(M_KEY_CMD[event.keyCode]);
     }
 
-    function events_gateway(code){
+    async function events_gateway(code){
         // LOG(tank1_pose)
         switch (code) {
             case EVT_CMD_PAUSE:
@@ -192,9 +191,25 @@
                 break
             case EVT_CMD_START:
                 if (RT.GAME_STATE & (is_end)){
-                    reload_game()
+                    await reload_game()
                     RT.GAME_STATE = is_running
                 }
+                break
+            case EVT_CMD_RELOAD:
+                await reload_game()
+                break
+            case EVT_VICTORY:
+                RT.GAME_STATE=is_end
+                print("victory, press G to restart")
+                LOG("victory")
+                draw('clear')
+                break
+            case EVT_DEFEAT:
+                RT.GAME_STATE=is_end
+                print('defeat, press G to restart')
+                LOG("defeat")
+                draw('clear')
+                break
         }
         if (RT.GAME_STATE & is_running) {
             switch (code) {
@@ -219,13 +234,21 @@
                         _.map(tanks, function (tank, k, l) {
                             if (tank.bul) {
                                 bul_move(tank.bul, tank.bul.velocity)
-                                // check_collision(bul)
-                                // check_borders(tank.bul, tank)
+                            }
+                        })
+                        _.map(turrets, function (turret, k, l) {
+                            for (let bul of turret.bullets) {
+                                bul_move(bul, bul.velocity)
                             }
                         })
                     }
                     check_endgame()
                     // draw()
+                    break
+                case EVT_TURRET_SHOOT:
+                    for (let t of turrets) {
+                        t.shoot()
+                    }
             }
         }
         // LOG(tank1)
@@ -248,17 +271,27 @@
     function bul_move(obj,pos){
         let new_obj_pos=stc(_.deepClone(obj.cell_pos))
         let str_obj_pos=cts(add_v(new_obj_pos,pos))
-        // LOG(str_obj_pos)
-        // LOG(_.intersection(str_field,[str_obj_pos]))
+
+
         obj.cell_pos=str_obj_pos
-        if (_.intersection(str_field,[str_obj_pos]).length===0) {
-            collide(obj)
+        if (obj.side===0) {
+            if (_.intersection(str_field,[str_obj_pos]).length===0) {
+                collide_with_wall(obj)
+            }
+        } else {
+            let tf=[]
+            for (let t of tanks) { tf.push(t.cell_pos)}
+            check_borders(obj)
+            if (_.intersection(tf,[str_obj_pos]).length>0) {
+                collide_with_tank(obj)
+            }
         }
+
         // LOG(obj.pos)
         draw()
     }
 
-    function collide(obj) {
+    function collide_with_wall(obj) {
         str_field=_.union(str_field,_.intersection(walls_fields.des,[obj.cell_pos]))
         str_field=_.union(str_field,_.intersection(walls_fields.tar,[obj.cell_pos]))
         walls_fields.des=_.difference(walls_fields.des,[obj.cell_pos])
@@ -266,21 +299,23 @@
         // LOG(_.difference(walls_fields.des,[obj.cell_pos]))
         obj.tank.bul=undefined
     }
+    function collide_with_tank(obj) {
+
+        events_gateway(EVT_DEFEAT)
+
+    }
 
     function check_endgame() {
-        LOG(walls_fields)
+        // LOG(walls_fields)
         if (walls_fields.tar.length===0) {
-            RT.GAME_STATE=is_end
-            LOG("victory")
-            draw_api(DRAW_CLEAR,	{ surface : RT.SCREEN, crect : C_SCREEN_CRECT } );
+            events_gateway(EVT_VICTORY)
 
         }
     }
 
-    function check_borders(obj,tank){
+    function check_borders(obj){
         if (_.intersection(str_field,[obj.cell_pos]).length===0) {
-            tank.bul=undefined
-            draw()
+            obj.turret.bullets.splice(obj.turret.bullets.indexOf(obj),1)
         }
     }
 
@@ -314,6 +349,10 @@
         return v
     }
 
+    function print(text) {
+        result_textblock.textContent=text
+    }
+
 
     function reload_screen_config(){
         C_SCREEN_CX		= C_CELLS_X * C_CELL_CX
@@ -325,11 +364,101 @@
         C_RS_CRECT = [0,0,C_RS_X,C_RS_Y]
     }
 
-    function draw(){
+    async function get_map() {
+        return fetch('http://127.0.0.1:57392/map', { mode: 'cors'})
+            .then((response) => {return response.json()})
+    }
+
+
+    async function reload_game(){
+
+        print('')
+
+        // LOG('reload')
+
+        // let map="ggtgg\nggggg\nggsgg\ngssww\nggggg\nggtwg\nggtsg"
+        let data=await get_map()
+        // LOG(data)
+        let new_map=data['map']
+        let new_turrets=data['turrets']
+        // LOG(new_turrets)
+        // LOG(new_map)
+
+
+
+        walls_fields={ind:[],des:[], tar:[]}
+        turrets=[]
+
+        let parsed_map = new_map.split('\n')
+        C_CELLS_X=parsed_map[0].length
+        C_CELLS_Y=parsed_map.length
+        // LOG(C_CELLS_X,C_CELLS_Y)
+        reload_screen_config()
+
+        draw('clear')
+
+        for (let x=0; x<C_CELLS_X; x++) {
+            for (let y=0; y<C_CELLS_Y; y++) {
+                let cell=parsed_map[y][x]
+                switch (cell) {
+                    case 's':
+                        walls_fields.ind.push(cts([x,y]))
+                        break
+                    case 'w':
+                        walls_fields.des.push(cts([x,y]))
+                        break
+                    case 't':
+                        walls_fields.tar.push(cts([x,y]))
+                        break
+                }
+            }
+        }
+
+
+        for (let t of new_turrets) {
+            turrets.push({
+                cell_pos: cts(t[0]),
+                direction: t[1],
+                bullets: [],
+                shoot: function () {
+                        this.bullets.push({
+                            direction: this.direction,
+                            cell_pos: this.cell_pos,
+                            velocity: rotate_v(bul_template.velocity, (this.direction-1)*Math.PI/2),
+                            turret: this,
+                            side: 1
+                        })
+                    }
+            })
+        }
+
+
+
+        tanks[0].cell_pos='0x0'
+
+        let full_field=cartesianProduct(_.range(0,C_CELLS_X,1),_.range(0,C_CELLS_Y,1))
+        full_str_field=_.map(full_field,function (v,k,l) { return cts(v);})
+
+        let cxcy=cartesianProduct(_.range(0,C_SCREEN_CX,C_CELL_CX),_.range(0,C_SCREEN_CY,C_CELL_CY));
+        cxcy=_.map(cxcy,function (v,k,l){return v.concat([C_CELL_CX,C_CELL_CY]);})
+        xy_cxcy=_.object(full_str_field,cxcy);
+        // LOG(xy_cxcy)
+
+        str_field=_.difference(full_str_field,walls_fields.ind,walls_fields.des,walls_fields.tar)
+        draw()
+    }
+
+    function draw(mode='normal'){
+
+        if (mode === 'clear') {
+            // LOG('clearing')
+            draw_api(DRAW_CLEAR,{ surface : RT.SCREEN, crect : C_SCREEN_CRECT } );
+            return
+        }
+
         draw_api(DRAW_CLEAR,	{ surface : RT.SCREEN_BUFFER, crect : C_SCREEN_CRECT } );
 
-
-        _.map(str_field,function (v,k,l){
+         _.map(str_field,function (v,k,l){
             draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : xy_cxcy[v],
             crect_uv : C_RS_CRECT, resource : IMAGES[1].resource});
         })
@@ -363,13 +492,19 @@
             }
         })
 
-        
+        _.map(turrets, function(turret,k,l){
+            draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : xy_cxcy[turret.cell_pos],
+            crect_uv : C_RS_CRECT, resource : TSPRITE[turret.direction].resource});
+            _.map(turret.bullets, function(bul,k,l) {
+                draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN_BUFFER, crect : xy_cxcy[bul.cell_pos],
+                crect_uv : C_RS_CRECT, resource : BSPRITE[bul.direction].resource});
+            })
+        })
 
 
         draw_api(DRAW_BITBLIT,	{ surface : RT.SCREEN, crect : C_SCREEN_CRECT ,
             crect_uv : C_SCREEN_CRECT, resource : RT.SCREEN_BUFFER.draw_api.canvas});
     }
-
 
     async function init() {
 
@@ -385,70 +520,18 @@
         await __.RHAL.load_files(BSPRITE);
 
 
-        // draw_api(DRAW_CLEAR,	{ surface : RT.SCREEN, crect : C_SCREEN_CRECT } );
 
         document.addEventListener('keydown', function(event) { click_gateway(event); } );
+        result_textblock=document.getElementById('result')
         setInterval(async function() { events_gateway(EVT_TIMER) }, C_TIMER_INTERVAL_MS);
+        setInterval(async function() { events_gateway(EVT_TURRET_SHOOT) }, SHOOT_TIMER_INTERVAL_MS);
 
 
-    }
-
-    function reload_game(){
-
-        LOG('reload')
-
-        // let map="ggtgg\nggggg\nggsgg\ngssww\nggggg\nggtwg\nggtsg"
-        let map=''
-        fetch()
-
-        // walls_fields={ind:['3x3','3x4','3x5','7x7'],des:['2x3','5x6','9x1'],
-        //                 tar:['10x7','10x8','11x7','11x8']}
-        //
-        let parsed_map = map.split('\n')
-        C_CELLS_X=parsed_map[0].length
-        C_CELLS_Y=parsed_map.length
-        LOG(C_CELLS_X,C_CELLS_Y)
-        reload_screen_config()
-
-        for (let x=0; x<C_CELLS_X; x++) {
-            for (let y=0; y<C_CELLS_Y; y++) {
-                let cell=parsed_map[y][x]
-                switch (cell) {
-                    case 's':
-                        walls_fields.ind.push(cts([x,y]))
-                        break
-                    case 'w':
-                        walls_fields.des.push(cts([x,y]))
-                        break
-                    case 't':
-                        walls_fields.tar.push(cts([x,y]))
-                        break
-                }
-            }
-        }
-
-
-
-        tanks[0].cell_pos='0x0'
-
-        let full_field=cartesianProduct(_.range(0,C_CELLS_X,1),_.range(0,C_CELLS_Y,1))
-        full_str_field=_.map(full_field,function (v,k,l) { return cts(v);})
-
-        let cxcy=cartesianProduct(_.range(0,C_SCREEN_CX,C_CELL_CX),_.range(0,C_SCREEN_CY,C_CELL_CY));
-        cxcy=_.map(cxcy,function (v,k,l){return v.concat([C_CELL_CX,C_CELL_CY]);})
-        xy_cxcy=_.object(full_str_field,cxcy);
-        // LOG(xy_cxcy)
-
-        str_field=_.difference(full_str_field,walls_fields.ind,walls_fields.des,walls_fields.tar)
-        draw()
     }
 
 
     async function main(){
-        // LOG("Hello")
-        // var a=5
-        // var b=['ss','32',6]
-        // LOG(a,b)
+
         game_state=is_running;
         LOG(game_state)
         LOG(game_state&is_end)
@@ -457,62 +540,9 @@
 
 
 
-        // var x=_.range(0,10,1);
-        // var y=_.range(0,10,1);
-        // var xy=cartesianProduct(x,y)
-        // // LOG(xy)
-        // str_field=_.map(xy,function (v,k,l) { return cts(v);})
-        //
-        // // LOG(str_field)
-        // // LOG(_.intersection(str_field,tank1_pose))
-        // var cx=_.range(0,10*20,20);
-        //
-        //
-        // var cy=_.range(0,10*20,20);
-        // var cxcy=cartesianProduct(cx,cy);
-        // // LOG(cx)
-        // cxcy=_.map(cxcy,function (v,k,l){return [v[0],v[1],20,20];})
-        // xy_cxcy=_.object(str_field,cxcy);
-        //
-        // LOG(xy_cxcy)
-
         await init()
 
-        // draw()
-
     }
-
-
-    // class Vector{
-    //     constructor(x, y) {
-    //         this.x = x;
-    //         this.y = y;
-    //     }
-    //
-    //     add_ret(v2){
-    //         let v=_.deepClone(this)
-    //         v.x += v2.x
-    //         v.y += v2.y
-    //         return v
-    //     }
-    //
-    //     add(v2){
-    //         this.x += v2.x
-    //         this.y += v2.y
-    //     }
-    //
-    //     mult_ret(s){
-    //         let v=_.deepClone(this)
-    //         v.x *= s
-    //         v.y *= s
-    //         return v
-    //     }
-    //
-    //     mult(s){
-    //         this.x *= s
-    //         this.y *= s
-    //     }
-    // }
 
 
 
@@ -522,7 +552,9 @@
 <h1>Game</h1>
 
 <button onclick=events_gateway(EVT_CMD_START)>Start</button><br>
+<button onclick=events_gateway(EVT_CMD_RELOAD)>Reload map</button><br>
 <br>
+<p id="result"></p>
 <br><br>
 
 <canvas id=main_screen  class="css_main_screen"></canvas>
