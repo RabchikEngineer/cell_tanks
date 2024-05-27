@@ -14,8 +14,12 @@ def main():
     return static_file('start.htm',root='')
 
 @get('/lib/<filename>')
-def static(filename):
+def libs(filename):
     return static_file(filename,root='lib/')
+
+@get('/resources/<filename>')
+def resources(filename):
+    return static_file(filename,root='resources/')
 
 @get('/map')
 def get_map():
