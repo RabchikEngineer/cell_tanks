@@ -13,6 +13,10 @@ def hello():
 def main():
     return static_file('start.htm',root='')
 
+@get('/lib/<filename>')
+def static(filename):
+    return static_file(filename,root='lib/')
+
 @get('/map')
 def get_map():
     # resp=Response(body=random.choice(existed_data))
