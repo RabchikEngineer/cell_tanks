@@ -17,7 +17,7 @@ def main():
 def libs(filename):
     return static_file(filename,root='lib/')
 
-@get('/resources/<filename>')
+@get('/resources/<path:path>')
 def resources(filename):
     return static_file(filename,root='resources/')
 
