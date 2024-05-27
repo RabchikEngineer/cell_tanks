@@ -17,7 +17,7 @@ def hello():
 def get_map():
     # resp=Response(body=random.choice(existed_data))
     response.add_header("Access-Control-Allow-Origin","*")
-    response.add_header("test", True)
+    #response.add_header("test", True)
     return random.choice(existed_data)
 
 
@@ -30,7 +30,7 @@ def map_list():
 #     return static_file('add_exception.html', root='static/')
 
 @post('/add_map')
-def add_exception_backend():
+def add_map_api():
     print(dir(request.body))
     data = request.body.read().decode('utf-8')
     if data not in existed_data:
